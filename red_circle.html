@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>jsPsych Circle Experiment</title>
+  <!-- jsPsych core library and CSS -->
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet" type="text/css" />
+  <!-- html-keyboard-response plugin -->
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <style>
+    /* 1. 背景色を灰色 (#808080) に設定 */
+    body {
+      background-color: #808080;
+      margin: 0;
+      padding: 0;
+      color: white; /* テキストを読みやすくするため白に設定 */
+    }
+
+    /* 2. 直径100pxの赤い円の定義 */
+    .red-circle {
+      height: 100px;
+      width: 100px;
+      background-color: #ff0000;
+      border-radius: 50%;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* 画面中央に配置するためのコンテナ */
+    .jspsych-content-wrapper {
+      background-color: #808080 !important;
+    }
+  </style>
+</head>
+<body></body>
+<script>
+  /**
+   * jsPsychの初期化
+   */
+  const jsPsych = initJsPsych({
+    on_finish: function() {
+      // データの表示（デバッグ用）
+      // jsPsych.data.displayData();
+    }
+  });
+
+  // 1. 開始メッセージ (オプション)
+  const welcome = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div style="font-family: sans-serif;">
+        <p>準備ができたら何かキーを押してください。</p>
+      </div>
+    `
+  };
+
+  // 2. 円を表示する試行 (仕様: 100pxの赤い円、スペースキーで終了)
+  const circle_trial = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="red-circle"></div>
+      <p style="margin-top: 20px; font-family: sans-serif;">スペースキーを押してください</p>
+    `,
+    choices: [' '], // スペースキーのみ受け付け
+    data: {
+      task: 'red_circle_response'
+    }
+  };
+
+  // 3. 終了メッセージを表示する試行
+  const end_screen = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div style="font-family: sans-serif;">
+        <h1>終了しました</h1>
+        <p>ご協力ありがとうございました。</p>
+      </div>
+    `,
+    choices: "NO_KEYS", // 何も押せない設定（または一定時間で終了）
+    trial_duration: 3000
+  };
+
+  /**
+   * タイムラインの構築と実行
+   */
+  const timeline = [welcome, circle_trial, end_screen];
+  jsPsych.run(timeline);
+</script>
+</html>
