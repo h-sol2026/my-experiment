@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Müller-Lyer Illusion Experiment</title>
+    <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { background-color: #f8f9fa; color: #212529; font-family: sans-serif; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        #jspsych-target { width: 100%; display: flex; justify-content: center; align-items: center; }
+        .jspsych-content { max-width: 800px; text-align: center; background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e9ecef; }
+        canvas { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; display: block; margin: 0 auto; }
+        .trial-header { font-size: 18px; font-weight: bold; color: #6c757d; margin-bottom: 15px; }
+        .trial-instruction { font-size: 15px; color: #495057; margin-top: 15px; background: #f1f3f5; padding: 10px 18px; border-radius: 6px; display: inline-block; }
+    </style>
+    <script src="https://unpkg.com/jspsych@7.3.4/dist/index.browser.min.js"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2/dist/index.browser.min.js"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-canvas-keyboard-response@1.1.2/dist/index.browser.min.js"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.2/dist/index.browser.min.js"></script>
+</head>
+<body>
+    <div id="jspsych-target"></div>
+    <script>
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbxbQ5OjBCC2Wfa78uegQPXrkiByT-ow0m_DC-LKusRz--jXlOdwhgQAXW4yZItcnYjN/exec';
+        const jsPsych = initJsPsych({ display_element: 'jspsych-target' });
+
+        const STIMULUS_WIDTH = 200;
+        const design = [
+            { angle: 15, fin_length: 20 }, { angle: 15, fin_length: 50 },
+            { angle: 75, fin_length: 20 }, { angle: 75, fin_length: 50 }
+        ];
+        const randomized_trials = [...design, ...design, ...design].sort(() => Math.random() - 0.5);
+
+        function drawMullerLyer(ctx, x, y, length, finLength, angle, isOutward) {
+            ctx.beginPath();
+            ctx.moveTo(x - length / 2, y); ctx.lineTo(x + length / 2, y);
+            ctx.strokeStyle = '#212529'; ctx.lineWidth = 3; ctx.stroke();
+            const angleRad = (angle * Math.PI) / 180;
+            const dir = isOutward ? -1 : 1;
+            const drawFins = (px, flip) => {
+                ctx.beginPath();
+                ctx.moveTo(px, y);
+                ctx.lineTo(px + flip * dir * finLength * Math.cos(angleRad), y - finLength * Math.sin(angleRad));
+                ctx.moveTo(px, y);
+                ctx.lineTo(px + flip * dir * finLength * Math.cos(angleRad), y + finLength * Math.sin(angleRad));
+                ctx.stroke();
+            };
+            drawFins(x - length / 2, 1);
+            drawFins(x + length / 2, -1);
+        }
+
+        const timeline = [];
+        timeline.push({ type: jsPsychSurveyText, questions: [{ prompt: "参加者IDを入力してください", name: "subject_id", required: true }] });
+        timeline.push({ type: jsPsychHtmlKeyboardResponse, stimulus: "<h1>ミュラー・リヤー錯視実験</h1><p>スペースキーを押して開始します。</p>", choices: [' '] });
+
+        randomized_trials.forEach((trialConfig, index) => {
+            let currentLen = 200;
+            timeline.push({
+                type: jsPsychCanvasKeyboardResponse,
+                canvas_size: [400, 600],
+                choices: [' '],
+                stimulus: (c) => {
+                    const ctx = c.getContext('2d');
+                    ctx.clearRect(0, 0, c.width, c.height);
+                    drawMullerLyer(ctx, 300, 120, STIMULUS_WIDTH, trialConfig.fin_length, trialConfig.angle, false);
+                    drawMullerLyer(ctx, 300, 280, currentLen, trialConfig.fin_length, trialConfig.angle, true);
+                },
+                prompt: `<div class="trial-header">試行: ${index + 1} / 12</div><div class="trial-instruction">←/→ キーで調整、スペースで確定</div>`,
+                on_load: function() {
+                    const canvas = document.getElementById('jspsych-canvas-stimulus');
+                    let activeKey = null;
+                    const update = () => {
+                        if (activeKey === 'ArrowLeft') currentLen = Math.max(20, currentLen - 2);
+                        if (activeKey === 'ArrowRight') currentLen = Math.min(580, currentLen + 2);
+                        if (activeKey) {
+                            const ctx = canvas.getContext('2d');
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            drawMullerLyer(ctx, 300, 120, STIMULUS_WIDTH, trialConfig.fin_length, trialConfig.angle, false);
+                            drawMullerLyer(ctx, 300, 280, currentLen, trialConfig.fin_length, trialConfig.angle, true);
+                            requestAnimationFrame(update);
+                        }
+                    };
+                    window.onkeydown = (e) => { if(e.key.startsWith('Arrow') && !activeKey) { activeKey = e.key; update(); } };
+                    window.onkeyup = () => { activeKey = null; };
+                },
+                on_finish: function(data) {
+                    const subId = jsPsych.data.get().filter({trial_type: 'survey-text'}).last(1).values()[0].response.subject_id;
+                    data.subject_id = subId;
+                    data.angle = trialConfig.angle;
+                    data.wing_length = trialConfig.fin_length;
+                    data.standard_len = STIMULUS_WIDTH;
+                    data.pse = currentLen;
+                    data.error_amount = currentLen - STIMULUS_WIDTH;
+                }
+            });
+        });
+
+        timeline.push({
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: "送信中...",
+            on_start: async () => {
+                const data = jsPsych.data.get().filter({trial_type: 'canvas-keyboard-response'}).values();
+                try {
+                    await fetch(GAS_URL, { 
+                        method: 'POST', 
+                        mode: 'no-cors', 
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(data) 
+                    });
+                    document.querySelector('.jspsych-content').innerHTML = "<h1>実験終了</h1><p>データが送信されました。</p>";
+                } catch(e) {
+                    document.querySelector('.jspsych-content').innerHTML = "<h1>エラー</h1><p>送信に失敗しました。</p>";
+                }
+            },
+            choices: 'NO_KEYS'
+        });
+
+        jsPsych.run(timeline);
+    </script>
+</body>
+</html>
