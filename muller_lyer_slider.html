@@ -54,7 +54,8 @@
             ctx.lineWidth = 3;
             ctx.strokeStyle = '#333';
             
-            const cx = 350; 
+            // 中心を400に戻して中央配置にする
+            const cx = 400; 
             const rad = angle * Math.PI / 180;
 
             const renderFigure = (centerY, length, isInner) => {
