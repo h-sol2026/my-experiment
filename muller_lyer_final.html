@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>錯視実験</title>
+    <script src="https://unpkg.com/jspsych@7.3.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-canvas-slider-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+    <link href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; background-color: #f0f0f0; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .jspsych-content { max-width: 90%; }
+        p { font-size: 1.2rem; line-height: 1.6; color: #333; }
+        .jspsych-btn { padding: 15px 30px; border-radius: 50px; font-size: 1.1rem; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .jspsych-btn:hover { background-color: #0056b3; }
+        canvas { max-width: 100%; height: auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #ccc; display: block; margin: 0 auto; }
+        /* スライダーを左寄りを維持しつつ、もう少し右に調整 */
+        .jspsych-canvas-slider-response-slider { display: flex; justify-content: flex-start; margin: 20px 0; }
+        input[type="range"] { width: 80%; max-width: 400px; height: 10px; cursor: pointer; display: block; margin-left: 15%; margin-right: auto; }
+        .counter { color: #888; font-size: 0.9rem; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <script>
+        const jsPsych = initJsPsych({
+            on_finish: function(data) {
+                const subject_id = jsPsych.data.get().filter({trial_type: 'survey-text'}).values()[0].response.subject_id;
+                const results = jsPsych.data.get().filter({trial_type: 'canvas-slider-response'}).values().map(t => ({
+                    subject_id: subject_id,
+                    timestamp: t.time_elapsed,
+                    angle: t.angle,
+                    wing_length: t.wingLength,
+                    pse: t.response,
+                    error_amount: t.response - 200
+                }));
+
+                const url = 'https://script.google.com/macros/s/AKfycbwgkHE4wODAsmB9XDNKkKRJ3GtoEdvSl5NsTDIUTau9epEc9DoZanvAi6z7jBc4mnHrdw/exec';
+                document.body.innerHTML = '<div style="text-align:center; padding: 20px;">送信中...</div>';
+
+                fetch(url, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(results)
+                }).then(() => {
+                    document.body.innerHTML = '<div style="text-align:center; padding: 20px;">送信が完了しました。<br>ご協力ありがとうございました。</div>';
+                }).catch(err => {
+                    document.body.innerHTML = '<div style="text-align:center; padding: 20px;">送信失敗: ' + err + '</div>';
+                });
+            }
+        });
+
+        const drawStimuli = (c, sliderValue, angle, wingL) => {
+            const ctx = c.getContext('2d');
+            c.width = 800; c.height = 500;
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.lineWidth = 3; ctx.strokeStyle = '#333';
+            const cx = 400; const rad = angle * Math.PI / 180;
+
+            const renderFigure = (centerY, length, isInner) => {
+                const x1 = cx - length / 2; const x2 = cx + length / 2;
+                ctx.beginPath(); ctx.moveTo(x1, centerY); ctx.lineTo(x2, centerY); ctx.stroke();
+                const drawArrow = (x, isRight) => {
+                    let dir = isInner ? (isRight ? -1 : 1) : (isRight ? 1 : -1);
+                    const dx = dir * wingL * Math.cos(rad); const dy = wingL * Math.sin(rad);
+                    ctx.beginPath(); ctx.moveTo(x, centerY); ctx.lineTo(x + dx, centerY - dy);
+                    ctx.moveTo(x, centerY); ctx.lineTo(x + dx, centerY + dy); ctx.stroke();
+                };
+                drawArrow(x1, false); drawArrow(x2, true);
+            };
+            renderFigure(150, 200, true);
+            renderFigure(350, sliderValue, false);
+        };
+
+        const trials = [];
+        [15, 75].forEach(angle => {
+            [20, 50].forEach(wl => {
+                for(let i=0; i<3; i++) trials.push({ angle, wingLength: wl });
+            });
+        });
+        const shuffledTrials = jsPsych.randomization.repeat(trials, 1);
+
+        const experimentProcedure = shuffledTrials.map((t, index) => ({
+            type: jsPsychCanvasSliderResponse,
+            prompt: `<div class="counter">現在 ${index + 1} 回目 / 全 12 回</div><p>上の横線と下の横線が同じ長さに見えるように調整してください</p>`,
+            canvas_size: [500, 800],
+            slider_start: () => Math.floor(Math.random() * 201) + 100,
+            min: 50, max: 350,
+            angle: t.angle, wingLength: t.wingLength,
+            stimulus: (c) => {
+                const slider = document.querySelector('input[type="range"]');
+                const val = slider ? parseFloat(slider.value) : 200;
+                drawStimuli(c, val, t.angle, t.wingLength);
+            },
+            on_load: () => {
+                const slider = document.querySelector('input[type="range"]');
+                const canvas = document.querySelector('canvas');
+                slider.addEventListener('input', (e) => drawStimuli(canvas, parseFloat(e.target.value), t.angle, t.wingLength));
+            },
+            button_label: "決定"
+        }));
+
+        jsPsych.run([
+            {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: "<p>ご協力ありがとうございます。<br>これから短い視覚のテストを行います。</p>",
+                choices: ["次へ"]
+            },
+            {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: "<p>画面に２つの『矢印のような図形』が上下に並んで表示されます。<br>下の図形は、スライダーを動かすと長さが変わります。</p>",
+                choices: ["次へ"]
+            },
+            {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: "<p>スライダーを動かして、<b>上の横線</b>と<b>下の横線</b>がピッタリ同じ長さに見えるところで、【決定】ボタンを押してください。</p>",
+                choices: ["実験を開始する"]
+            },
+            {
+                type: jsPsychSurveyText,
+                questions: [{prompt: "参加者IDを入力してください", name: "subject_id", required: true}]
+            },
+            ...experimentProcedure
+        ]);
+    </script>
+</body>
+</html>
